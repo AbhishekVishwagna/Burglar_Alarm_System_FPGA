@@ -10,7 +10,7 @@ The system replicates a real security alarm with four states - Disarmed, Armed, 
 
 ## System design
 
-The Burglar Alarm System is implemented on the DE1-SoC platform, utilizing a hardware-software co-design approach. The core logic is governed by a synchronous Finite State Machine (FSM), which ensures reliable transitions between security states based on user input and sensor data.
+The Burglar Alarm System is implemented on the DE1-SoC platform, utilizing a hardware & software co design approach. The core logic is governed by a synchronous Finite State Machine (FSM), which ensures reliable transitions between security states based on user input and sensor data.
 
 ---
 ### Functional Block Diagram
@@ -102,4 +102,75 @@ The buttons are debounced (20ms counter at 50MHz) so each physical press produce
 | SUCCESS | "PIN ENTERED  SUCCESSFULLY" | Green |
 | LOCKOUT | "WRONG PIN  SYSTEM LOCKED" | Red |
  
+---
+---
+## Hardware Testing
+
+Hardware testing was done on the DE1-SoC board in the lab. Each state transition was tested manually by operating the switches and buttons and observing the LCD screen, 7-seg displays, and LEDs to confirm the system behaved as expected.
+
+
+### Arming and Disarming
+
+The first thing tested was the basic arm and disarm. Flipping SW[0] up moved the system from the blue "LOCK THE SYSTEM" screen to the green "LOCKED" screen, and flipping it back down returned it to idle. This confirmed the IDLE to ARMED transition and back was working correctly through the 2 stage synchroniser in the top level.
+
+<img width="1280" height="719" alt="WhatsApp Image 2026-05-08 at 1 09 50 PM" src="https://github.com/user-attachments/assets/5821424a-3a4b-457a-ac6f-c9b03ef56ea7" />
+
+#
+
+### Sensor Trigger
+
+SW[1] was flipped up to simulate a motion detection event. The LCD immediately switched to the red alarm screen and the 5 second countdown appeared on HEX0 and HEX1. The key thing tested here was leaving SW[1] up after triggering, because of the rising edge detector in the top level, the alarm only fired once and did not keep retriggering while the switch stayed high. After 5 seconds the system automatically moved to the PIN entry screen.
+
+<img width="1265" height="739" alt="WhatsApp Image 2026-05-08 at 1 09 50 PM (1)" src="https://github.com/user-attachments/assets/4d7c9a7b-8bb9-459a-a0c2-3d6c8a19cb89" />
+
+#
+
+### PIN Entry
+
+The correct sequence (KEY2 → KEY3 → KEY1) was entered and the system moved to the green success screen then re armed back to LOCKED. I also tested entering wrong sequences — after each wrong 3 press attempt the LCD correctly updated to show the remaining attempts going from 2 down to 1. On the third wrong attempt the system went to the red lockout screen and the 30-second countdown started on the 7 seg displays. The attempt counter on LEDR[6:5] was also watched during this test and decremented correctly alongside the LCD.
+
+<img width="1162" height="739" alt="WhatsApp Image 2026-05-08 at 1 09 50 PM (2)" src="https://github.com/user-attachments/assets/5a55d941-fc83-4b24-ac8c-971fae80ce52" />
+
+#
+
+### Timeout
+
+Let the 60 second PIN entry timer run out without pressing any buttons. The system moved to LOCKOUT automatically once the countdown hit zero, which confirmed the `pin_timer_done` signal from timer module was being received correctly by the state machine.
+
+<img width="1151" height="739" alt="WhatsApp Image 2026-05-08 at 1 09 50 PM (3)" src="https://github.com/user-attachments/assets/33ee16a1-959f-42b4-aa6f-586998c8892f" />
+
+#
+
+### Reset
+
+KEY[0] was held down from several different states — ARMED, TRIGGERED, PIN_ENTRY, and LOCKOUT and in every case the system returned to IDLE and the LCD went back to the blue lock screen. This confirmed the synchronised reset was working correctly from any state.
+
+<img width="1138" height="739" alt="WhatsApp Image 2026-05-08 at 1 09 50 PM (4)" src="https://github.com/user-attachments/assets/fbab374b-e8e7-4f4d-b628-a5ed10db7f74" />
+
+#
+
+---
+## File Structure
+
+```text
+    ├── State Machine Core/         # Core Logic & Verification
+    │   ├── Burglar_Alarm.v         # State machine core logic
+    │   ├── Burglar_Alarm_tb.v      # Testbench for state machine logic
+    │   ├── pin_checker.v           # PIN logic pattern (KEY2-KEY3-KEY1) 
+    │   └── pin_checker_tb.v        # Testbench for PIN logic 
+    ├── LCD DISPLAY/                # UI Assets & Screens
+    │   ├── alarm_screen.v          # UI for Triggered state 
+    │   ├── enter_pin_screen.v      # UI for PIN Entry state 
+    │   ├── lockout_screen.v        # UI for Lockout state 
+    │   └── success_screen.v        # UI for Success state 
+    ├── Timers and 7 Segment/       # Hardware Outputs
+    │   ├── clock_divider_1s.v      # 1Hz pulse generation
+    │   ├── hex_to_7seg.v           # Decoder for HEX displays 
+    │   └── timer_demo_top.v        # Test wrapper for timers 
+    ├── Button Debouncer/           # Input Processing
+    │   ├── Button_Debouncing.v     # Signal cleaning 
+    │   └── Input_Router.v          # Signal distribution 
+    |
+    └── README.md
+```
 ---
